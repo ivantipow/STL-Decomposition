@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STL Decomposition Visualizer</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/stats.js@0.17.0/build/stats.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/regression@2.0.1/dist/regression.min.js"></script>
+    <style>
+        .point {
+            position: absolute;
+            width: 10px;
+            height: 10px;
+            background-color: #3B82F6;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            cursor: move;
+        }
+        .chart-container {
+            position: relative;
+        }
+        .data-point {
+            position: absolute;
+            width: 8px;
+            height: 8px;
+            background-color: #EF4444;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+        .slider-thumb::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #3B82F6;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <div class="container mx-auto px-4 py-8">
+        <header class="mb-8 text-center">
+            <h1 class="text-3xl font-bold text-gray-800 mb-2">STL Decomposition Visualizer</h1>
+            <p class="text-gray-600">Визуализация сезонно-временной декомпозиции временных рядов</p>
+        </header>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Left panel - Controls -->
+            <div class="bg-white p-6 rounded-lg shadow-md">
+                <h2 class="text-xl font-semibold mb-4 text-gray-800">Настройки данных</h2>
+                
+                <div class="mb-6">
+                    <h3 class="font-medium mb-2 text-gray-700">Источник данных</h3>
+                    <div class="flex space-x-2">
+                        <button id="sample-data-btn" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition">Пример данных</button>
+                        <button id="manual-data-btn" class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 transition">Ручной ввод</button>
+                    </div>
+                </div>
+
+                <!-- Manual data input -->
+                <div id="manual-input-section" class="hidden mb-6">
+                    <h3 class="font-medium mb-2 text-gray-700">Добавить точки</h3>
+                    <div class="flex space-x-2 mb-4">
+                        <input type="number" id="x-value" placeholder="X" class="w-1/2 px-3 py-2 border rounded">
+                        <input type="number" id="y-value" placeholder="Y" class="w-1/2 px-3 py-2 border rounded">
+                        <button id="add-point-btn" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition">+</button>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <button id="clear-points-btn" class="w-full px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition">Очистить все точки</button>
+                    </div>
+                    
+                    <div class="h-48 overflow-y-auto border rounded p-2">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="border-b">
+                                    <th class="text-left py-1">X</th>
+                                    <th class="text-left py-1">Y</th>
+                                    <th class="text-left py-1"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="points-table">
+                                <!-- Points will be added here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- STL Parameters -->
+                <div class="mt-6">
+                    <h3 class="font-medium mb-2 text-gray-700">Параметры STL</h3>
+                    
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Сезонный период</label>
+                        <input type="range" id="seasonal-period" min="2" max="24" value="12" class="w-full slider-thumb">
+                        <div class="flex justify-between text-xs text-gray-500">
+                            <span>2</span>
+                            <span id="seasonal-period-value">12</span>
+                            <span>24</span>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Сглаживание</label>
+                        <input type="range" id="smoothing-factor" min="5" max="50" value="15" class="w-full slider-thumb">
+                        <div class="flex justify-between text-xs text-gray-500">
+                            <span>5</span>
+                            <span id="smoothing-factor-value">15</span>
+                            <span>50</span>
+                        </div>
+                    </div>
+                    
+                    <div class="mb-4">
+                        <label class="block text-sm font-medium text-gray-700 mb-1">Итерации</label>
+                        <input type="range" id="stl-iterations" min="1" max="10" value="3" class="w-full slider-thumb">
+                        <div class="flex justify-between text-xs text-gray-500">
+                            <span>1</span>
+                            <span id="stl-iterations-value">3</span>
+                            <span>10</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <button id="run-analysis-btn" class="w-full mt-6 px-4 py-3 bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 transition shadow-md">
+                    Выполнить декомпозицию
+                </button>
+            </div>
+
+            <!-- Main chart area -->
+            <div class="lg:col-span-2 space-y-6">
+                <!-- Original data chart -->
+                <div class="bg-white p-6 rounded-lg shadow-md">
+                    <h2 class="text-xl font-semibold mb-4 text-gray-800">Исходный временной ряд</h2>
+                    <div class="chart-container" style="height: 300px;">
+                        <canvas id="original-chart"></canvas>
+                        <div id="interactive-area" class="absolute inset-0 cursor-crosshair"></div>
+                    </div>
+                </div>
+                
+                <!-- STL decomposition results -->
+                <div id="results-section" class="hidden">
+                    <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+                        <h2 class="text-xl font-semibold mb-4 text-gray-800">Тренд</h2>
+                        <div style="height: 250px;">
+                            <canvas id="trend-chart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-white p-6 rounded-lg shadow-md mb-6">
+                        <h2 class="text-xl font-semibold mb-4 text-gray-800">Сезонность</h2>
+                        <div style="height: 250px;">
+                            <canvas id="seasonal-chart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <div class="bg-white p-6 rounded-lg shadow-md">
+                        <h2 class="text-xl font-semibold mb-4 text-gray-800">Остатки</h2>
+                        <div style="height: 250px;">
+                            <canvas id="residual-chart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // DOM elements
+            const originalCtx = document.getElementById('original-chart').getContext('2d');
+            const trendCtx = document.getElementById('trend-chart').getContext('2d');
+            const seasonalCtx = document.getElementById('seasonal-chart').getContext('2d');
+            const residualCtx = document.getElementById('residual-chart').getContext('2d');
+            const interactiveArea = document.getElementById('interactive-area');
+            const manualInputSection = document.getElementById('manual-input-section');
+            const resultsSection = document.getElementById('results-section');
+            
+            // Sliders
+            const seasonalPeriodSlider = document.getElementById('seasonal-period');
+            const smoothingFactorSlider = document.getElementById('smoothing-factor');
+            const stlIterationsSlider = document.getElementById('stl-iterations');
+            
+            // Display values
+            const seasonalPeriodValue = document.getElementById('seasonal-period-value');
+            const smoothingFactorValue = document.getElementById('smoothing-factor-value');
+            const stlIterationsValue = document.getElementById('stl-iterations-value');
+            
+            // Buttons
+            const sampleDataBtn = document.getElementById('sample-data-btn');
+            const manualDataBtn = document.getElementById('manual-data-btn');
+            const addPointBtn = document.getElementById('add-point-btn');
+            const clearPointsBtn = document.getElementById('clear-points-btn');
+            const runAnalysisBtn = document.getElementById('run-analysis-btn');
+            
+            // Input fields
+            const xValueInput = document.getElementById('x-value');
+            const yValueInput = document.getElementById('y-value');
+            const pointsTable = document.getElementById('points-table');
+            
+            // Data storage
+            let dataPoints = [];
+            let originalChart, trendChart, seasonalChart, residualChart;
+            let isDragging = false;
+            let draggedPoint = null;
+            
+            // Sample data
+            const sampleData = generateSampleData(48, 12);
+            
+            // Initialize
+            initOriginalChart();
+            updateSliderValues();
+            loadSampleData();
+            
+            // Event listeners
+            seasonalPeriodSlider.addEventListener('input', updateSliderValues);
+            smoothingFactorSlider.addEventListener('input', updateSliderValues);
+            stlIterationsSlider.addEventListener('input', updateSliderValues);
+            
+            sampleDataBtn.addEventListener('click', loadSampleData);
+            manualDataBtn.addEventListener('click', showManualInput);
+            addPointBtn.addEventListener('click', addDataPoint);
+            clearPointsBtn.addEventListener('click', clearDataPoints);
+            runAnalysisBtn.addEventListener('click', runSTLDecomposition);
+            
+            interactiveArea.addEventListener('mousedown', startDrag);
+            interactiveArea.addEventListener('mousemove', dragPoint);
+            interactiveArea.addEventListener('mouseup', endDrag);
+            interactiveArea.addEventListener('mouseleave', endDrag);
+            interactiveArea.addEventListener('click', addInteractivePoint);
+            
+            // Functions
+            function updateSliderValues() {
+                seasonalPeriodValue.textContent = seasonalPeriodSlider.value;
+                smoothingFactorValue.textContent = smoothingFactorSlider.value;
+                stlIterationsValue.textContent = stlIterationsSlider.value;
+            }
+            
+            function generateSampleData(length, seasonality) {
+                const data = [];
+                for (let i = 0; i < length; i++) {
+                    const x = i;
+                    const trend = 5 + 0.1 * x;
+                    const seasonal = 2 * Math.sin(2 * Math.PI * x / seasonality);
+                    const noise = (Math.random() - 0.5) * 1.5;
+                    const y = trend + seasonal + noise;
+                    data.push({ x, y });
+                }
+                return data;
+            }
+            
+            function loadSampleData() {
+                dataPoints = [...sampleData];
+                updateOriginalChart();
+                updatePointsTable();
+                manualInputSection.classList.add('hidden');
+                resultsSection.classList.add('hidden');
+            }
+            
+            function showManualInput() {
+                manualInputSection.classList.remove('hidden');
+                resultsSection.classList.add('hidden');
+            }
+            
+            function addDataPoint() {
+                const x = parseFloat(xValueInput.value);
+                const y = parseFloat(yValueInput.value);
+                
+                if (!isNaN(x) && !isNaN(y)) {
+                    dataPoints.push({ x, y });
+                    dataPoints.sort((a, b) => a.x - b.x);
+                    updateOriginalChart();
+                    updatePointsTable();
+                    
+                    // Clear inputs
+                    xValueInput.value = '';
+                    yValueInput.value = '';
+                    xValueInput.focus();
+                }
+            }
+            
+            function addInteractivePoint(e) {
+                if (isDragging || e.target !== interactiveArea) return;
+                
+                const rect = interactiveArea.getBoundingClientRect();
+                const x = originalChart.scales.x.getValueForPixel(e.clientX - rect.left);
+                const y = originalChart.scales.y.getValueForPixel(e.clientY - rect.top);
+                
+                dataPoints.push({ x, y });
+                dataPoints.sort((a, b) => a.x - b.x);
+                updateOriginalChart();
+                updatePointsTable();
+            }
+            
+            function clearDataPoints() {
+                dataPoints = [];
+                updateOriginalChart();
+                updatePointsTable();
+                resultsSection.classList.add('hidden');
+            }
+            
+            function updatePointsTable() {
+                pointsTable.innerHTML = '';
+                
+                dataPoints.forEach((point, index) => {
+                    const row = document.createElement('tr');
+                    row.className = 'border-b hover:bg-gray-50';
+                    
+                    const xCell = document.createElement('td');
+                    xCell.className = 'py-1';
+                    xCell.textContent = point.x.toFixed(2);
+                    
+                    const yCell = document.createElement('td');
+                    yCell.className = 'py-1';
+                    yCell.textContent = point.y.toFixed(2);
+                    
+                    const actionCell = document.createElement('td');
+                    actionCell.className = 'py-1 text-right';
+                    
+                    const deleteBtn = document.createElement('button');
+                    deleteBtn.className = 'text-red-500 hover:text-red-700';
+                    deleteBtn.innerHTML = '&times;';
+                    deleteBtn.addEventListener('click', () => {
+                        dataPoints.splice(index, 1);
+                        updateOriginalChart();
+                        updatePointsTable();
+                    });
+                    
+                    actionCell.appendChild(deleteBtn);
+                    row.appendChild(xCell);
+                    row.appendChild(yCell);
+                    row.appendChild(actionCell);
+                    pointsTable.appendChild(row);
+                });
+            }
+            
+            function initOriginalChart() {
+                originalChart = new Chart(originalCtx, {
+                    type: 'line',
+                    data: {
+                        datasets: [{
+                            label: 'Исходные данные',
+                            data: [],
+                            borderColor: '#3B82F6',
+                            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: true,
+                            tension: 0.4
+                        }]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        scales: {
+                            x: {
+                                type: 'linear',
+                                position: 'bottom',
+                                title: {
+                                    display: true,
+                                    text: 'Время'
+                                }
+                            },
+                            y: {
+                                title: {
+                                    display: true,
+                                    text: 'Значение'
+                                }
+                            }
+                        },
+                        plugins: {
+                            tooltip: {
+                                mode: 'index',
+                                intersect: false
+                            },
+                            legend: {
+                                display: false
+                            }
+                        },
+                        interaction: {
+                            mode: 'nearest',
+                            axis: 'x',
+                            intersect: false
+                        }
+                    }
+                });
+            }
+            
+            function updateOriginalChart() {
+                originalChart.data.datasets[0].data = dataPoints.map(p => ({ x: p.x, y: p.y }));
+                originalChart.update();
+                
+                // Clear any existing data points
+                document.querySelectorAll('.data-point').forEach(el => el.remove());
+                
+                // Add interactive data points
+                dataPoints.forEach(point => {
+                    const pointEl = document.createElement('div');
+                    pointEl.className = 'data-point';
+                    pointEl.dataset.x = point.x;
+                    pointEl.dataset.y = point.y;
+                    
+                    const xPixel = originalChart.scales.x.getPixelForValue(point.x);
+                    const yPixel = originalChart.scales.y.getPixelForValue(point.y);
+                    
+                    pointEl.style.left = `${xPixel}px`;
+                    pointEl.style.top = `${yPixel}px`;
+                    
+                    interactiveArea.appendChild(pointEl);
+                });
+            }
+            
+            function startDrag(e) {
+                if (e.target.classList.contains('data-point')) {
+                    isDragging = true;
+                    draggedPoint = e.target;
+                    document.body.style.cursor = 'grabbing';
+                }
+            }
+            
+            function dragPoint(e) {
+                if (!isDragging) return;
+                
+                const rect = interactiveArea.getBoundingClientRect();
+                const x = originalChart.scales.x.getValueForPixel(e.clientX - rect.left);
+                const y = originalChart.scales.y.getValueForPixel(e.clientY - rect.top);
+                
+                // Update point position
+                draggedPoint.style.left = `${e.clientX - rect.left}px`;
+                draggedPoint.style.top = `${e.clientY - rect.top}px`;
+                
+                // Find and update the corresponding data point
+                const pointIndex = dataPoints.findIndex(p => 
+                    p.x.toFixed(2) === draggedPoint.dataset.x && 
+                    p.y.toFixed(2) === draggedPoint.dataset.y
+                );
+                
+                if (pointIndex !== -1) {
+                    dataPoints[pointIndex] = { x, y };
+                    draggedPoint.dataset.x = x.toFixed(2);
+                    draggedPoint.dataset.y = y.toFixed(2);
+                    
+                    // Update the chart
+                    originalChart.data.datasets[0].data = dataPoints.map(p => ({ x: p.x, y: p.y }));
+                    originalChart.update();
+                }
+            }
+            
+            function endDrag() {
+                if (isDragging) {
+                    isDragging = false;
+                    draggedPoint = null;
+                    document.body.style.cursor = '';
+                    
+                    // Re-sort points after drag
+                    dataPoints.sort((a, b) => a.x - b.x);
+                    updatePointsTable();
+                }
+            }
+            
+            function runSTLDecomposition() {
+                if (dataPoints.length < 10) {
+                    alert('Недостаточно данных для анализа. Добавьте хотя бы 10 точек.');
+                    return;
+                }
+                
+                const seasonalPeriod = parseInt(seasonalPeriodSlider.value);
+                const smoothingWindow = parseInt(smoothingFactorSlider.value);
+                const iterations = parseInt(stlIterationsSlider.value);
+                
+                // Extract x and y values
+                const xValues = dataPoints.map(p => p.x);
+                const yValues = dataPoints.map(p => p.y);
+                
+                // Simple STL-like decomposition (simplified for demo)
+                const trend = loessSmoothing(yValues, smoothingWindow);
+                const seasonal = extractSeasonality(yValues, trend, seasonalPeriod);
+                const residuals = yValues.map((y, i) => y - trend[i] - seasonal[i]);
+                
+                // Update results charts
+                updateResultsCharts(xValues, yValues, trend, seasonal, residuals);
+                resultsSection.classList.remove('hidden');
+            }
+            
+            function loessSmoothing(data, windowSize) {
+                const smoothed = [];
+                const halfWindow = Math.floor(windowSize / 2);
+                
+                for (let i = 0; i < data.length; i++) {
+                    const start = Math.max(0, i - halfWindow);
+                    const end = Math.min(data.length - 1, i + halfWindow);
+                    const window = data.slice(start, end + 1);
+                    
+                    // Simple moving average
+                    const sum = window.reduce((a, b) => a + b, 0);
+                    smoothed.push(sum / window.length);
+                }
+                
+                return smoothed;
+            }
+            
+            function extractSeasonality(data, trend, period) {
+                const detrended = data.map((y, i) => y - trend[i]);
+                const seasonal = Array(data.length).fill(0);
+                
+                // Group by seasonal period
+                const seasonalGroups = {};
+                detrended.forEach((value, i) => {
+                    const pos = i % period;
+                    if (!seasonalGroups[pos]) seasonalGroups[pos] = [];
+                    seasonalGroups[pos].push(value);
+                });
+                
+                // Calculate average for each seasonal position
+                const seasonalPattern = {};
+                Object.keys(seasonalGroups).forEach(pos => {
+                    const values = seasonalGroups[pos];
+                    const avg = values.reduce((a, b) => a + b, 0) / values.length;
+                    seasonalPattern[pos] = avg;
+                });
+                
+                // Apply seasonal pattern
+                detrended.forEach((_, i) => {
+                    const pos = i % period;
+                    seasonal[i] = seasonalPattern[pos];
+                });
+                
+                // Center the seasonal component
+                const seasonalMean = seasonal.reduce((a, b) => a + b, 0) / seasonal.length;
+                return seasonal.map(s => s - seasonalMean);
+            }
+            
+            function updateResultsCharts(xValues, yValues, trend, seasonal, residuals) {
+                // Destroy existing charts if they exist
+                if (trendChart) trendChart.destroy();
+                if (seasonalChart) seasonalChart.destroy();
+                if (residualChart) residualChart.destroy();
+                
+                // Trend chart
+                trendChart = new Chart(trendCtx, {
+                    type: 'line',
+                    data: {
+                        labels: xValues,
+                        datasets: [
+                            {
+                                label: 'Исходные данные',
+                                data: yValues,
+                                borderColor: 'rgba(59, 130, 246, 0.3)',
+                                backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                                borderWidth: 1,
+                                pointRadius: 0
+                            },
+                            {
+                                label: 'Тренд',
+                                data: trend,
+                                borderColor: '#10B981',
+                                backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                                borderWidth: 2,
+                                pointRadius: 0
+                            }
+                        ]
+                    },
+                    options: getChartOptions('Трендовая компонента')
+                });
+                
+                // Seasonal chart
+                seasonalChart = new Chart(seasonalCtx, {
+                    type: 'line',
+                    data: {
+                        labels: xValues,
+                        datasets: [{
+                            label: 'Сезонность',
+                            data: seasonal,
+                            borderColor: '#F59E0B',
+                            backgroundColor: 'rgba(245, 158, 11, 0.1)',
+                            borderWidth: 2,
+                            pointRadius: 0,
+                            fill: true
+                        }]
+                    },
+                    options: getChartOptions('Сезонная компонента')
+                });
+                
+                // Residual chart
+                residualChart = new Chart(residualCtx, {
+                    type: 'line',
+                    data: {
+                        labels: xValues,
+                        datasets: [{
+                            label: 'Остатки',
+                            data: residuals,
+                            borderColor: '#EF4444',
+                            backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                            borderWidth: 1,
+                            pointRadius: 0,
+                            fill: true
+                        }]
+                    },
+                    options: getChartOptions('Остаточная компонента')
+                });
+            }
+            
+            function getChartOptions(title) {
+                return {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            position: 'bottom',
+                            title: {
+                                display: true,
+                                text: 'Время'
+                            }
+                        },
+                        y: {
+                            title: {
+                                display: true,
+                                text: 'Значение'
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'top',
+                        },
+                        title: {
+                            display: true,
+                            text: title,
+                            font: {
+                                size: 16
+                            }
+                        }
+                    }
+                };
+            }
+        });
+    </script>
+</body>
+</html>
